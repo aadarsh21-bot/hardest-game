@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>2D Shooter Game</title>
+<style>
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+}
+canvas {
+    display: block;
+    background: #222;
+}
+#restartBtn {
+    position: absolute;
+    top: 55%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 15px 30px;
+    font-size: 20px;
+    cursor: pointer;
+    display: none;
+}
+</style>
+</head>
+<body>
+
+<button id="restartBtn">Restart Game</button>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const restartBtn = document.getElementById("restartBtn");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// ================= WORLD (BIGGER MAP) =================
+const world = {
+    width: 3000,
+    height: 3000
+};
+
+// ================= PLAYER =================
+const player = {
+    x: world.width / 2,
+    y: world.height / 2,
+    angle: 0,
+    radius: 15,
+    speed: 2,
+    runSpeed: 4,
+    maxHealth: 100,
+    health: 100
+};
+
+// ================= GAME DATA =================
+let mouseX = 0, mouseY = 0;
+let keys = {};
+let bullets = [];
+let enemies = [];
+let gameOver = false;
+
+// ================= CAMERA =================
+const camera = { x: 0, y: 0 };
+
+// ================= MAP WALLS =================
+const walls = [
+    {x: 400, y: 400, w: 600, h: 30},
+    {x: 1200, y: 700, w: 30, h: 600},
+    {x: 800, y: 1500, w: 700, h: 30},
+    {x: 1800, y: 1000, w: 30, h: 700}
+];
+
+// ================= INPUT =================
+window.addEventListener("mousemove", e => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+});
+
+window.addEventListener("keydown", e => keys[e.code] = true);
+window.addEventListener("keyup", e => keys[e.code] = false);
+
+// LEFT CLICK FIRE
+window.addEventListener("mousedown", e => {
+    if (e.button === 0 && !gameOver) shoot();
+});
+
+// ================= SHOOT =================
+function shoot() {
+    bullets.push({
+        x: player.x,
+        y: player.y,
+        angle: player.angle,
+        speed: 9
+    });
+}
+
+// ================= ENEMIES =================
+function spawnEnemy() {
+    if (!gameOver) {
+        enemies.push({
+            x: Math.random() * world.width,
+            y: Math.random() * world.height,
+            speed: 1.1,
+            radius: 15
+        });
+    }
+}
+setInterval(spawnEnemy, 1600);
+
+// ================= HEALTH BAR =================
+function drawHealthBar() {
+    const barWidth = 200;
+    const barHeight = 20;
+
+    ctx.fillStyle = "gray";
+    ctx.fillRect(20, 20, barWidth, barHeight);
+
+    ctx.fillStyle = "lime";
+    ctx.fillRect(20, 20, (player.health / player.maxHealth) * barWidth, barHeight);
+
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(20, 20, barWidth, barHeight);
+}
+
+// ================= RESTART =================
+restartBtn.onclick = () => {
+    player.health = player.maxHealth;
+    player.x = world.width / 2;
+    player.y = world.height / 2;
+    bullets = [];
+    enemies = [];
+    gameOver = false;
+    restartBtn.style.display = "none";
+    update();
+};
+
+// ================= GAME LOOP =================
+function update() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (player.health <= 0) {
+        gameOver = true;
+        ctx.fillStyle = "red";
+        ctx.font = "50px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+        restartBtn.style.display = "block";
+        return;
+    }
+
+    // CAMERA FOLLOW PLAYER
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
+
+    // LOW MOUSE SENSITIVITY (smoothing)
+    const targetAngle = Math.atan2(
+        mouseY + camera.y - player.y,
+        mouseX + camera.x - player.x
+    );
+    player.angle += (targetAngle - player.angle) * 0.08; // sensitivity control
+
+    // Movement
+    let speed = keys["KeyD"] ? player.runSpeed : player.speed;
+    player.x += Math.cos(player.angle) * speed;
+    player.y += Math.sin(player.angle) * speed;
+
+    // WORLD BOUNDS
+    player.x = Math.max(0, Math.min(world.width, player.x));
+    player.y = Math.max(0, Math.min(world.height, player.y));
+
+    // DRAW MAP
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, 0, world.width, world.height);
+
+    ctx.fillStyle = "#555";
+    walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+    // PLAYER
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+    ctx.fillStyle = "cyan";
+    ctx.beginPath();
+    ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, -3, 25, 6);
+    ctx.restore();
+
+    // BULLETS
+    bullets.forEach((b, i) => {
+        b.x += Math.cos(b.angle) * b.speed;
+        b.y += Math.sin(b.angle) * b.speed;
+
+        ctx.fillStyle = "yellow";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (b.x < 0 || b.y < 0 || b.x > world.width || b.y > world.height) {
+            bullets.splice(i, 1);
+        }
+    });
+
+    // ENEMIES AI
+    enemies.forEach((e, ei) => {
+        const dx = player.x - e.x;
+        const dy = player.y - e.y;
+        const dist = Math.hypot(dx, dy);
+
+        e.x += (dx / dist) * e.speed;
+        e.y += (dy / dist) * e.speed;
+
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (dist < player.radius + e.radius) {
+            player.health -= 0.35;
+        }
+
+        bullets.forEach((b, bi) => {
+            if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius) {
+                enemies.splice(ei, 1);
+                bullets.splice(bi, 1);
+            }
+        });
+    });
+
+    ctx.restore();
+
+    drawHealthBar();
+    requestAnimationFrame(update);
+}
+
+update();
+</script>
+
+</body>
+</html>
